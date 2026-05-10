@@ -1,0 +1,2 @@
+class MetadataWarehouse:
+    pass
