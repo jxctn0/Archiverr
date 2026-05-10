@@ -1,13 +1,20 @@
 import logging
+import sys
+from typing import Optional
 
+
+# =========================
+# ANSI STYLING (kept, cleaned)
+# =========================
 
 FORMATTING = {
     "BOLD": "\033[1m",
     "UNDERLINE": "\033[4m",
     "END": "\033[0m",
 }
+
 COLORS = {
-    "LIGHT":{
+    "LIGHT": {
         "BLACK": "\033[90m",
         "RED": "\033[91m",
         "GREEN": "\033[92m",
@@ -17,7 +24,7 @@ COLORS = {
         "CYAN": "\033[96m",
         "WHITE": "\033[97m",
     },
-    "DARK":{
+    "DARK": {
         "BLACK": "\033[30m",
         "RED": "\033[31m",
         "GREEN": "\033[32m",
@@ -27,7 +34,7 @@ COLORS = {
         "CYAN": "\033[36m",
         "WHITE": "\033[37m",
     },
-    "BACKGROUND":{
+    "BACKGROUND": {
         "BLACK": "\033[40m",
         "RED": "\033[41m",
         "GREEN": "\033[42m",
@@ -35,108 +42,111 @@ COLORS = {
         "BLUE": "\033[44m",
         "MAGENTA": "\033[45m",
         "CYAN": "\033[46m",
-        "WHITE": "\033[47m"
-    }
+        "WHITE": "\033[47m",
+    },
 }
 
-def color_text(text, color):
+
+# =========================
+# COLOR HELPERS (optional UI)
+# =========================
+
+def color_text(text: str, color: Optional[str]):
     if color is None:
         return text
-    elif color.upper() in COLORS["LIGHT"]:
-        return f"{COLORS['LIGHT'].get(color.upper(), '')}{text}{FORMATTING['END']}"
-    elif int(color) in range(256):
-        return f"\033[38;5;{color}m{text}{FORMATTING['END']}"
-    else:
-        return text
 
-    # Support for ansi codes directly passed as color: color_text(text, int(color))
-    # Based on: for code in {0..255}; do echo -e "\e[38;5;${code}m"'\\e[38;5;'"$code"m"\e[0m"; done
-    
-def format_text(text, *formats):
-    format_sequence = "".join([FORMATTING.get(fmt.upper(), "") for fmt in formats])
-    return f"{format_sequence}{text}{FORMATTING['END']}"
+    color = str(color).upper()
 
+    if color in COLORS["LIGHT"]:
+        return f"{COLORS['LIGHT'][color]}{text}{FORMATTING['END']}"
 
+    try:
+        code = int(color)
+        if 0 <= code <= 255:
+            return f"\033[38;5;{code}m{text}{FORMATTING['END']}"
+    except ValueError:
+        pass
 
-C = {
-    "D": COLORS["LIGHT"]["CYAN"],
-    "I": COLORS["LIGHT"]["GREEN"],
-    "W": COLORS["LIGHT"]["YELLOW"],
-    "E": COLORS["LIGHT"]["RED"],
-    "C": COLORS["LIGHT"]["MAGENTA"],
-    "R": FORMATTING["END"]
-}
+    return text
 
 
+def format_text(text: str, *formats):
+    seq = "".join([FORMATTING.get(f.upper(), "") for f in formats])
+    return f"{seq}{text}{FORMATTING['END']}"
 
 
-def setup_logging(level=logging.INFO):
+# =========================
+# LOGGING CORE
+# =========================
+
+LOGGER_NAME = "archiverr"
+
+
+def setup_logger(verbose: bool = False) -> logging.Logger:
+    """
+    Central logging setup.
+
+    verbose=True → DEBUG
+    verbose=False → INFO
+    """
+
+    level = logging.DEBUG if verbose else logging.INFO
+
     logging.basicConfig(
         level=level,
-        format="%(asctime)s [%(levelname)s] %(message)s",
+        format="%(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-def log_debug(message):
-    formatted = f"{C['D']}[DEBUG] {message}{C['R']}"
-    logging.debug(formatted)
-    return formatted
+    return logging.getLogger(LOGGER_NAME)
 
-def log_info(message):
-    formatted = f"{C['I']}[INFO] {message}{C['R']}"
-    logging.info(formatted)
-    return formatted
 
-def log_warning(message):
-    formatted = f"{C['W']}[WARNING] {message}{C['R']}"
-    logging.warning(formatted)
-    return formatted
+# =========================
+# PIPELINE LOGGING (MAIN API)
+# =========================
 
-def log_error(message):
-    formatted = f"{C['E']}[ERROR] {message}{C['R']}"
-    logging.error(formatted)
-    return formatted
+def log_event(logger: logging.Logger, stage: str, message: str):
+    """
+    Main structured logging format:
 
-def log_critical(message):
-    formatted = f"{C['C']}[CRITICAL] {message}{C['R']}"
-    logging.critical(formatted)
-    return formatted
+    [STAGE] message
+    """
+    logger.info(f"[{stage}] {message}")
 
-def log_data(data, level="info"):
-    # Log structured data (like dictionaries or lists) in a pretty-printed format with color-coding based on the log level
-    import json
-    message = json.dumps(data, indent=4, default=str)
-    return log(message, level)
 
-def log(message, level="info", noprint=False): 
-    # General log function that takes a message and a level and logs it using the appropriate log function based on the level - this is a convenience function to allow logging with color-coded output without having to call the specific log functions directly
-    level = level.lower()[0] # Get the first letter of the level to determine which log function to call
-    if level == "d":
-        if noprint:
-            return log_debug(message)
-        else:
-            print(log_debug(message))
-    elif level == "i":
-        if noprint:
-            return log_info(message)
-        else:
-            print(log_info(message))
-    elif level == "w":
-        if noprint:
-            return log_warning(message)
-        else:
-            print(log_warning(message))
-    elif level == "e":
-        if noprint:
-            return log_error(message)
-        else:
-            print(log_error(message))
-    elif level == "c":
-        if noprint:
-            return log_critical(message)
-        else:
-            print(log_critical(message))
-    else:
-        formatted = f"{C['I']}[INFO] {message}{C['R']}"
-        logging.info(formatted)
-        return formatted
+def log_debug_event(logger: logging.Logger, stage: str, message: str):
+    """
+    Debug-level structured logs (only shown in -v mode)
+    """
+    logger.debug(f"[{stage}] {message}")
 
+
+def log_track(logger: logging.Logger, stage: str, track, extra: str = ""):
+    """
+    Specialized helper for music pipeline logging.
+    """
+    msg = f"{track.artist} - {track.title}"
+    if extra:
+        msg += f" | {extra}"
+
+    logger.info(f"[{stage}] {msg}")
+
+
+def log_error(logger: logging.Logger, stage: str, message: str):
+    logger.error(f"[{stage}] {message}")
+
+
+# =========================
+# PIPELINE STAGE CONSTANTS
+# =========================
+
+class Stage:
+    INGEST = "INGEST"
+    PARSE = "PARSE"
+    DB = "DB"
+    RAW = "RAW"
+    CANONICAL = "CANONICAL"
+    SPOTIFY = "SPOTIFY"
+    MUSICBRAINZ = "MUSICBRAINZ"
+    YOUTUBE = "YOUTUBE"
+    DOWNLOAD = "DOWNLOAD"

@@ -5,6 +5,7 @@ from typing import Optional
 from dataclasses import dataclass, field
 
 from archiverr.core.models import Track, Playlist, Library
+#from archiverr.database import Database
 
 # Example of the structure of the header of an Apple Music library XML file
 # The actual file will contain many more fields and nested structures, but this is a simplified example to illustrate the parsing process
