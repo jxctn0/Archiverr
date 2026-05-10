@@ -1,0 +1,117 @@
+flowchart TD
+
+%% =======================
+%% INPUT LAYER
+%% =======================
+
+A[Apple Music Library.xml] --> B[Parser Layer]
+
+B --> B1[Apple Music Parser]
+B1 --> C[Track Normalization]
+
+%% =======================
+%% CORE DOMAIN LAYER
+%% =======================
+
+C --> D[Canonical Track Model]
+
+D --> E[SQLite Warehouse]
+
+%% =======================
+%% METADATA RESOLUTION LAYER
+%% =======================
+
+D --> F[Metadata Resolver Engine]
+
+F --> F1[Spotify API Resolver]
+F --> F2[MusicBrainz Resolver]
+F --> F3[YouTube Resolver via yt-dlp search]
+
+F1 --> G[Metadata Merge Engine]
+F2 --> G
+F3 --> G
+
+G --> H[Unified Track Metadata]
+
+H --> E
+
+%% =======================
+%% CACHING LAYER
+%% =======================
+
+F1 --> C1[Spotify Cache]
+F2 --> C2[MusicBrainz Cache]
+F3 --> C3[YouTube Cache]
+
+C1 --> F1
+C2 --> F2
+C3 --> F3
+
+%% =======================
+%% DOWNLOAD LAYER
+%% =======================
+
+H --> I[Download Scheduler]
+
+I --> J[YTDLP Engine]
+
+J --> K[Audio Files]
+
+K --> L[Filesystem Archive]
+L --> L1[/artist/album/track.ext structure/]
+
+%% =======================
+%% TAGGING LAYER
+%% =======================
+
+K --> M[Tagging Engine]
+
+M --> M1[Mutagen Tag Writer]
+M --> M2[Artwork Embedding]
+
+M1 --> L
+M2 --> L
+
+%% =======================
+%% MANIFEST LAYER
+%% =======================
+
+K --> N[Manifest Generator]
+
+N --> N1[JSON Track Manifests]
+N1 --> E
+
+%% =======================
+%% ANALYSIS LAYER
+%% =======================
+
+E --> O[Analytics Engine]
+
+O --> O1[Year Heatmaps]
+O --> O2[Genre Distribution]
+O --> O3[Missing Metadata Detection]
+O --> O4[DRM / Protected Analysis]
+
+%% =======================
+%% WORKER SYSTEM
+%% =======================
+
+P[Async Worker Pool] --> F
+P --> I
+P --> M
+
+%% =======================
+%% CLI LAYER
+%% =======================
+
+Q[CLI - Typer Interface] --> B
+Q --> F
+Q --> I
+Q --> O
+
+%% =======================
+%% DATABASE CORE
+%% =======================
+
+E --> R[SQLite / Postgres Optional]
+R --> D

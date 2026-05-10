@@ -1,0 +1,300 @@
+
+# [ ] 🧱 Phase 1 — Core Stability (must be done first)
+
+### ✔ Project structure & execution
+
+* [x] Add `archiverr/__main__.py`
+* [ ] Fix CLI entry via Typer (`app()` working)
+* [ ] Add `pyproject.toml` script entry (`archiverr = ...`)
+* [ ] Ensure `pip install -e .` works cleanly
+
+---
+
+### ✔ Data model correctness
+
+* [ ] Finalise `Track` dataclass (no ordering bugs)
+* [ ] Finalise `Library` + `Playlist` models
+* [ ] Ensure all optional fields are consistent (`None` vs defaults)
+* [ ] Add `raw_apple_data` preservation everywhere
+
+---
+
+### ✔ Apple Music ingestion (core input)
+
+* [ ] Fully parse `Library.xml` (tracks + playlists)
+* [ ] Parse ALL useful fields:
+
+  * [ ] Track metadata
+  * [ ] Play counts
+  * [ ] Dates (added, modified, played)
+  * [ ] Protected / Apple Music flags
+  * [ ] File location decoding
+* [ ] Validate parsing on large library (10k+ tracks)
+
+---
+
+# 🗃 Phase 2 — Local Database (turn it into a system)
+
+### ✔ SQLite warehouse
+
+* [ ] Implement `init_db()`
+* [ ] Create schema migration system (even simple versioned SQL files)
+* [ ] Add:
+
+  * [ ] `insert_track`
+  * [ ] `update_track`
+  * [ ] `get_track_by_id`
+  * [ ] `bulk_insert_tracks`
+
+---
+
+### ✔ Canonical ID system (critical)
+
+* [ ] Implement deterministic `canonical_id`
+* [ ] Ensure it uses:
+
+  * artist
+  * title
+  * album
+  * duration
+* [ ] Store canonical ID in DB immediately on ingest
+
+---
+
+### ✔ Ingestion pipeline v1
+
+* [ ] `archiverr ingest <Library.xml>`
+* [ ] Parse → normalize → assign IDs → store in DB
+* [ ] Output stats:
+
+  * total tracks
+  * protected tracks
+  * missing metadata
+
+---
+
+# 🔍 Phase 3 — Metadata Resolution Layer
+
+### ✔ Spotify resolver
+
+* [ ] Search by artist + track
+* [ ] Add fuzzy matching (rapidfuzz)
+* [ ] Store:
+
+  * Spotify ID
+  * ISRC (if available)
+  * confidence score
+
+---
+
+### ✔ MusicBrainz resolver
+
+* [ ] Query recordings
+* [ ] Match by:
+
+  * ISRC (priority)
+  * duration
+  * artist/title fallback
+* [ ] Cache results locally (VERY important)
+
+---
+
+### ✔ YouTube resolver
+
+* [ ] yt-dlp search integration
+* [ ] Select best “official audio” candidate
+* [ ] Store YouTube URL + ID
+
+---
+
+### ✔ Metadata merge engine
+
+* [ ] Combine all sources into unified record
+* [ ] Resolve conflicts using confidence scoring
+* [ ] Store final “resolved metadata” in DB
+
+---
+
+# ⬇️ Phase 4 — Download System (turn it into an archiver)
+
+### ✔ yt-dlp downloader
+
+* [ ] Download highest quality audio
+* [ ] Output format:
+
+  ```
+  /archive/{artist}/{album}/{track}.ext
+  ```
+
+---
+
+### ✔ Download scheduler
+
+* [ ] Queue system (async or threaded)
+* [ ] Retry logic
+* [ ] Resume support
+
+---
+
+### ✔ File verification
+
+* [ ] Hashing (SHA256 or BLAKE3)
+* [ ] Detect duplicates
+* [ ] Skip already downloaded files
+
+---
+
+### ✔ Source ranking system
+
+* [ ] Prefer:
+
+  * official uploads
+  * correct duration match
+  * highest bitrate
+* [ ] Reject:
+
+  * lyric videos
+  * sped-up/slowed versions
+  * reuploads
+
+---
+
+# 🏷 Phase 5 — Tagging & Local Files
+
+### ✔ Audio tagging
+
+* [ ] Write metadata to files (mutagen)
+* [ ] Embed:
+
+  * artist
+  * album
+  * ISRC
+  * artwork
+  * year
+
+---
+
+### ✔ Artwork system
+
+* [ ] Spotify cover art fallback
+* [ ] MusicBrainz Cover Art Archive integration
+* [ ] Cache images locally
+
+---
+
+# 📊 Phase 6 — Analysis Layer (value-add features)
+
+### ✔ Library analytics
+
+* [ ] Year distribution heatmap
+* [ ] Genre distribution
+* [ ] Artist frequency
+* [ ] DRM/protected ratio
+
+---
+
+### ✔ Outlier detection
+
+* [ ] Missing metadata detection
+* [ ] Broken tracks
+* [ ] Unmatched tracks (no Spotify/MB/YT match)
+
+---
+
+# 🧠 Phase 7 — Self-Healing Archive (advanced)
+
+### ✔ Manifest system
+
+* [ ] JSON manifest per track
+* [ ] Store:
+
+  * all IDs
+  * all sources
+  * file hash
+  * metadata version
+
+---
+
+### ✔ Repair engine
+
+* [ ] Re-download broken tracks
+* [ ] Re-resolve metadata
+* [ ] Fix missing artwork
+
+---
+
+### ✔ Cache system
+
+* [ ] Spotify cache
+* [ ] MusicBrainz cache
+* [ ] YouTube cache
+
+---
+
+# ⚙️ Phase 8 — Performance & Scale
+
+* [ ] Async pipeline (replace blocking calls)
+* [ ] Batch DB writes
+* [ ] Rate limiting per API
+* [ ] Parallel metadata resolution workers
+
+---
+
+# 🧪 Phase 9 — Testing & Reliability
+
+* [ ] Test Apple XML parsing (large libraries)
+* [ ] Test duplicate detection
+* [ ] Test broken metadata cases
+* [ ] Test missing file scenarios
+* [ ] Benchmark ingest speed
+
+---
+
+# 🚀 Phase 10 — Usable Application
+
+### ✔ CLI commands
+
+* [ ] `archiverr ingest`
+* [ ] `archiverr resolve`
+* [ ] `archiverr download`
+* [ ] `archiverr analyze`
+* [ ] `archiverr repair`
+
+---
+
+### ✔ Minimal end-to-end flow (MVP goal)
+
+This is your first real milestone:
+
+```text
+Library.xml
+→ ingest
+→ SQLite storage
+→ Spotify resolution
+→ YouTube fallback
+→ download audio
+→ tag files
+→ store archive
+```
+
+---
+
+# 🎯 Definition of “Functional Application”
+
+You are DONE when:
+
+* You can feed in a Library.xml
+* It fully parses without errors
+* It stores everything in a database
+* It resolves at least Spotify + YouTube
+* It downloads at least one correct track
+* It saves files in structured folders
+* It can resume after interruption
+
+---
+
+If you want next step guidance, I can turn this into:
+
+* a sprint plan (day-by-day build order)
+* or a proper architecture diagram
+* or the full ingestion pipeline implementation (the most important part)

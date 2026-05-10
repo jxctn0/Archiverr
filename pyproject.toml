@@ -3,3 +3,6 @@ name = "archiverr"
 version = "0.1.0"
 description = "Long-term music archival framework"
 requires-python = ">=3.11"
+
+[project.scripts]
+archiverr = "archiverr.cli.app:app"
