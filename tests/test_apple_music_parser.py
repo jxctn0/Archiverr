@@ -1,3 +1,11 @@
+############ test_apple_music_parser.py ###############
+#
+# Test helper script for Apple Music library parsing.
+# Loads the sample library fixture and prints summary information
+# for tracks and playlists to help verify parser output.
+#
+#=======================================================
+
 import random
 from dataclasses import asdict
 import json
