@@ -82,12 +82,13 @@ def format_text(text: str, *formats):
 LOGGER_NAME = "archiverr"
 
 
-def setup_logger(verbose: bool = False) -> logging.Logger:
+def setup_logging(verbose: bool = False, color: bool = True) -> logging.Logger:
     """
     Central logging setup.
 
     verbose=True → DEBUG
     verbose=False → INFO
+    
     """
 
     level = logging.DEBUG if verbose else logging.INFO
@@ -98,7 +99,9 @@ def setup_logger(verbose: bool = False) -> logging.Logger:
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    return logging.getLogger(LOGGER_NAME)
+    logger = logging.getLogger(LOGGER_NAME)
+    logger.color_enabled = color
+    return logger
 
 
 # =========================
@@ -109,16 +112,28 @@ def log_event(logger: logging.Logger, stage: str, message: str):
     """
     Main structured logging format:
 
-    [STAGE] message
+    {ColorCode}[STAGE] message {ClearCode}
     """
-    logger.info(f"[{stage}] {message}")
+    if getattr(logger, 'color_enabled', True):
+        color = STAGE_COLORS.get(stage)
+        colored_stage = color_text(f"[{stage}]", color)
+    else:
+        colored_stage = f"[{stage}]"
+    
+    logger.info(f"{colored_stage} {message}")
 
 
 def log_debug_event(logger: logging.Logger, stage: str, message: str):
     """
     Debug-level structured logs (only shown in -v mode)
     """
-    logger.debug(f"[{stage}] {message}")
+    if getattr(logger, 'color_enabled', True):
+        color = STAGE_COLORS.get(stage)
+        colored_stage = color_text(f"[{stage}]", color)
+    else:
+        colored_stage = f"[{stage}]"
+    
+    logger.debug(f"{colored_stage} {message}")
 
 
 def log_track(logger: logging.Logger, stage: str, track, extra: str = ""):
@@ -129,11 +144,21 @@ def log_track(logger: logging.Logger, stage: str, track, extra: str = ""):
     if extra:
         msg += f" | {extra}"
 
-    logger.info(f"[{stage}] {msg}")
+    if getattr(logger, 'color_enabled', True):
+        color = STAGE_COLORS.get(stage)
+        colored_stage = color_text(f"[{stage}]", color)
+    else:
+        colored_stage = f"[{stage}]"
+    
+    logger.info(f"{colored_stage} {msg}")
 
 
 def log_error(logger: logging.Logger, stage: str, message: str):
-    logger.error(f"[{stage}] {message}")
+    if getattr(logger, 'color_enabled', True):
+        colored_stage = color_text(f"[{stage}]", "RED")
+    else:
+        colored_stage = f"[{stage}]"
+    logger.error(f"{colored_stage} {message}")
 
 
 # =========================
@@ -141,6 +166,7 @@ def log_error(logger: logging.Logger, stage: str, message: str):
 # =========================
 
 class Stage:
+    INIT = "INIT"
     INGEST = "INGEST"
     PARSE = "PARSE"
     DB = "DB"
@@ -150,3 +176,23 @@ class Stage:
     MUSICBRAINZ = "MUSICBRAINZ"
     YOUTUBE = "YOUTUBE"
     DOWNLOAD = "DOWNLOAD"
+
+
+# =========================
+# STAGE COLORS
+# =========================
+
+STAGE_COLORS = {
+    Stage.INIT: FORMATTING["BOLD"],
+    Stage.INGEST: COLORS["LIGHT"]["BLUE"],
+    Stage.PARSE: COLORS["LIGHT"]["CYAN"],
+    Stage.DB: COLORS["LIGHT"]["MAGENTA"],
+    Stage.RAW: COLORS["LIGHT"]["CYAN"],
+    Stage.CANONICAL: COLORS["LIGHT"]["RED"],
+    Stage.SPOTIFY: COLORS["LIGHT"]["BLUE"],  # Wait, LIGHT BLUE not defined, use BLUE
+    Stage.SPOTIFY: COLORS["LIGHT"]["BLUE"],
+    Stage.MUSICBRAINZ: COLORS["LIGHT"]["GREEN"],
+    Stage.YOUTUBE: COLORS["LIGHT"]["RED"],
+    Stage.DOWNLOAD: COLORS["LIGHT"]["YELLOW"],
+}
+

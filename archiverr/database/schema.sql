@@ -6,7 +6,35 @@
 PRAGMA foreign_keys = ON;
 
 -- =========================================
--- 1. RAW TRACKS (IMMUTABLE SOURCE LAYER)
+-- 0. METADATA VERSIONING
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY
+);
+
+INSERT OR IGNORE INTO schema_version (version) VALUES (1);
+
+-- =========================================
+-- 1. INGESTION BATCH TRACKING
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS ingest_batches (
+    batch_id TEXT PRIMARY KEY,
+
+    source_file TEXT,
+    file_hash TEXT UNIQUE,
+
+    total_tracks INTEGER DEFAULT 0,
+    num_tracks INTEGER DEFAULT 0,
+    num_playlists INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =========================================
+-- 2. RAW TRACKS (IMMUTABLE SOURCE LAYER)
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS raw_tracks (
@@ -49,16 +77,25 @@ CREATE TABLE IF NOT EXISTS raw_tracks (
 
     -- ingestion metadata
     import_batch_id TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (import_batch_id)
+    REFERENCES ingest_batches(batch_id)
+    ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_raw_tracks_track_id ON raw_tracks(track_id);
 CREATE INDEX IF NOT EXISTS idx_raw_tracks_persistent_id ON raw_tracks(persistent_id);
 CREATE INDEX IF NOT EXISTS idx_raw_tracks_artist ON raw_tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_raw_tracks_title ON raw_tracks(title);
+CREATE INDEX IF NOT EXISTS idx_raw_tracks_batch ON raw_tracks(import_batch_id);
+
+-- Prevent duplicate raw inserts
+CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_unique_track
+ON raw_tracks(track_id, persistent_id);
 
 -- =========================================
--- 2. CANONICAL TRACKS (DEDUPED IDENTITY)
+-- 3. CANONICAL TRACKS (DEDUPED IDENTITY)
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS canonical_tracks (
@@ -83,15 +120,28 @@ CREATE TABLE IF NOT EXISTS canonical_tracks (
     confidence REAL DEFAULT 0.0,
 
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (best_raw_id)
+    REFERENCES raw_tracks(id)
+    ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_canonical_artist ON canonical_tracks(artist);
 CREATE INDEX IF NOT EXISTS idx_canonical_title ON canonical_tracks(title);
 CREATE INDEX IF NOT EXISTS idx_canonical_isrc ON canonical_tracks(isrc);
 
+-- Auto-update timestamp
+CREATE TRIGGER IF NOT EXISTS update_canonical_updated_at
+AFTER UPDATE ON canonical_tracks
+BEGIN
+    UPDATE canonical_tracks
+    SET updated_at = CURRENT_TIMESTAMP
+    WHERE canonical_id = NEW.canonical_id;
+END;
+
 -- =========================================
--- 3. RAW → CANONICAL MAPPING
+-- 4. RAW → CANONICAL MAPPING
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS track_mapping (
@@ -100,14 +150,43 @@ CREATE TABLE IF NOT EXISTS track_mapping (
 
     PRIMARY KEY (raw_id, canonical_id),
 
-    FOREIGN KEY (raw_id) REFERENCES raw_tracks(id),
-    FOREIGN KEY (canonical_id) REFERENCES canonical_tracks(canonical_id)
+    FOREIGN KEY (raw_id)
+    REFERENCES raw_tracks(id)
+    ON DELETE CASCADE,
+
+    FOREIGN KEY (canonical_id)
+    REFERENCES canonical_tracks(canonical_id)
+    ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_mapping_canonical ON track_mapping(canonical_id);
 
 -- =========================================
--- 4. METADATA CACHE (API RATE LIMIT PROTECTION)
+-- 5. EXTERNAL IDS (NORMALISED IDENTITY LAYER)
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS external_ids (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    canonical_id TEXT,
+
+    source TEXT, -- spotify | musicbrainz | youtube | apple
+    external_id TEXT,
+
+    confidence REAL DEFAULT 0.0,
+
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (canonical_id)
+    REFERENCES canonical_tracks(canonical_id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_ids_canonical ON external_ids(canonical_id);
+CREATE INDEX IF NOT EXISTS idx_external_ids_source ON external_ids(source);
+
+-- =========================================
+-- 6. METADATA CACHE (API RATE LIMIT PROTECTION)
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS metadata_cache (
@@ -125,7 +204,7 @@ CREATE TABLE IF NOT EXISTS metadata_cache (
 CREATE INDEX IF NOT EXISTS idx_cache_source ON metadata_cache(source);
 
 -- =========================================
--- 5. DOWNLOAD TRACKING
+-- 7. DOWNLOAD TRACKING
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS downloads (
@@ -149,13 +228,15 @@ CREATE TABLE IF NOT EXISTS downloads (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (canonical_id) REFERENCES canonical_tracks(canonical_id)
+    FOREIGN KEY (canonical_id)
+    REFERENCES canonical_tracks(canonical_id)
+    ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_download_status ON downloads(status);
 
 -- =========================================
--- 6. RESOLUTION LOG (DEBUGGING + AUDIT)
+-- 8. RESOLUTION LOG (DEBUGGING + AUDIT)
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS resolution_log (
@@ -177,21 +258,7 @@ CREATE TABLE IF NOT EXISTS resolution_log (
 CREATE INDEX IF NOT EXISTS idx_resolution_canonical ON resolution_log(canonical_id);
 
 -- =========================================
--- 7. INGESTION BATCH TRACKING
--- =========================================
-
-CREATE TABLE IF NOT EXISTS ingest_batches (
-    batch_id TEXT PRIMARY KEY,
-
-    source_file TEXT,
-
-    total_tracks INTEGER DEFAULT 0,
-
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
--- =========================================
--- 8. OPTIONAL: ARTWORK CACHE
+-- 9. ARTWORK CACHE
 -- =========================================
 
 CREATE TABLE IF NOT EXISTS artwork_cache (
@@ -206,7 +273,9 @@ CREATE TABLE IF NOT EXISTS artwork_cache (
 
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (canonical_id) REFERENCES canonical_tracks(canonical_id)
+    FOREIGN KEY (canonical_id)
+    REFERENCES canonical_tracks(canonical_id)
+    ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_artwork_canonical ON artwork_cache(canonical_id);

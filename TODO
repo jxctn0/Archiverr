@@ -4,7 +4,6 @@
 ### ✔ Project structure & execution
 
 * [x] Add `archiverr/__main__.py`
-* [ ] Fix CLI entry via Typer (`app()` working)
 * [ ] Add `pyproject.toml` script entry (`archiverr = ...`)
 * [ ] Ensure `pip install -e .` works cleanly
 

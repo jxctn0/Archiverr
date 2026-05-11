@@ -5,6 +5,25 @@ from typing import Dict, Any, Iterable
 from archiverr.database.db import Database
 
 
+def _json_safe_dump(obj: Any) -> str:
+    """Serialize complex Apple Music payloads into JSON-safe strings."""
+
+    def _convert(value: Any) -> Any:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {k: _convert(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_convert(v) for v in value]
+        if isinstance(value, tuple):
+            return [_convert(v) for v in value]
+        if isinstance(value, set):
+            return [_convert(v) for v in value]
+        return value
+
+    return json.dumps(_convert(obj))
+
+
 class RawTrackRepository:
     def __init__(self, db: Database):
         self.db = db
@@ -48,31 +67,31 @@ class RawTrackRepository:
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
-                    track.track_id,
-                    track.persistent_id,
-                    track.title,
-                    track.artist,
-                    track.album,
-                    track.album_artist,
-                    track.composer,
-                    track.genre,
-                    track.year,
-                    track.release_date.isoformat() if track.release_date else None,
-                    track.duration_ms,
-                    track.track_number,
-                    track.track_count,
-                    track.disc_number,
-                    track.disc_count,
-                    track.kind,
-                    track.size,
-                    track.bitrate,
-                    track.sample_rate,
-                    track.location,
-                    track.track_type,
-                    int(track.protected),
-                    int(track.apple_music),
-                    json.dumps(track.raw_apple_data or {}),
-                    batch_id,
+                    track.track_id, # Type: Optional[int]
+                    track.persistent_id, # Type: Optional[str]
+                    track.title, # Type: Optional[str]
+                    track.artist, # Type: Optional[str]
+                    track.album, # Type: Optional[str]
+                    track.album_artist, # Type: Optional[str]
+                    track.composer, # Type: Optional[str]
+                    track.genre, # Type: Optional[str]
+                    track.year,  # Type: Optional[int]
+                    track.release_date.isoformat() if track.release_date else None, # Type: Optional[datetime]
+                    track.duration_ms, # Type: Optional[int]
+                    track.track_number, # Type: Optional[int]
+                    track.track_count, # Type: Optional[int]
+                    track.disc_number, # Type: Optional[int]
+                    track.disc_count, # Type: Optional[int]
+                    track.kind, # Type: Optional[str]
+                    track.size, # Type: Optional[int]
+                    track.bitrate, # Type: Optional[int]
+                    track.sample_rate, # Type: Optional[int]
+                    track.location, # Type: Optional[str]
+                    track.track_type, # Type: Optional[str]
+                    int(track.protected), # Type: Optional[bool] -> int
+                    int(track.apple_music), # Type: Optional[bool] -> int
+                    _json_safe_dump(track.raw_apple_data or {}), # Type: Optional[Dict[str, Any]] -> str
+                    batch_id, # Type: str
                 ),
             )
 
@@ -120,7 +139,7 @@ class RawTrackRepository:
                         t.track_type,
                         int(t.protected),
                         int(t.apple_music),
-                        json.dumps(t.raw_apple_data or {}),
+                        _json_safe_dump(t.raw_apple_data or {}),
                         batch_id,
                     )
                     for t in tracks

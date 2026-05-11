@@ -5,7 +5,6 @@ mutagen
 rapidfuzz
 requests
 rich
-typer[all]
 matplotlib
 pandas
 fastapi

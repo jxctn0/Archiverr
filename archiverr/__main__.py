@@ -1,7 +1,4 @@
-from archiverr.cli.app import app
-
-def main():
-    app()
+from archiverr.cli.app import main
 
 if __name__ == "__main__":
     main()

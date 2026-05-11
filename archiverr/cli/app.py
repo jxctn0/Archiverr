@@ -1,49 +1,133 @@
-#================== archiverr/cli/app.py ==================
-# This is the main entry point for the CLI application. It defines the commands and their associated functions.
-#
-# Usage:
-#  archiverr import <path_to_library> - Imports the Apple Music library from the specified path.
-#  archiverr analyze <path_to_library> - Analyzes the imported library and provides insights such as the distribution of tracks by year.
-#  archiverr --help/-h - Displays the help message with available commands and their descriptions.
-#  archiverr download - Downloads the music files based on the imported library (to be implemented).
-#
-# The CLI is built using the Typer library, which provides a simple and intuitive way to create command line interfaces in Python. Each command is decorated with @app.command() to register it with the Typer application. The functions associated with each command handle the logic for importing and analyzing the music library.
+import argparse
+
+from archiverr.parser.apple_music import parse_library
+from archiverr.database.db import Database
+from archiverr.database.repositories import RawTrackRepository, BatchRepository
+from archiverr.core.logging import setup_logging, log_event, Stage
+import uuid
+
+from archiverr.core.hashing import hash_file
 
 
-import typer
-
-app = typer.Typer()
-
-
-@app.command()
-def ingest(
-    path: str,
-    verbose: bool = typer.Option(False, "--verbose", "-v")
-):
-    from archiverr.core.logging import setup_logging, log_event, Stage
-    from archiverr.parser.apple_music import parse_library
-    from archiverr.database.db import Database
-    from archiverr.database.repositories import RawTrackRepository, BatchRepository
-
+def ingest(path: str, verbose: bool):
+    # Setup logging
     logger = setup_logging(verbose)
 
-    log_event(logger, Stage.INGEST, f"Loading {path}")
+    # Create fresh database instance to avoid cached connections
+    db_instance = Database()
+    conn = db_instance.connect()
 
-    library = parse_library(path)
+    # Calculate file hash to check for duplicates
+    file_hash = hash_file(path)
+    if verbose:
+        log_event(logger, Stage.INGEST, f"Computed file hash: {file_hash}")
 
-    log_event(logger, Stage.PARSE, f"{len(library.tracks)} tracks found")
+    # Check if this file has already been ingested
 
-    db = Database()
-    raw_repo = RawTrackRepository(db)
-    batch_repo = BatchRepository(db)
+    existing = conn.execute(
+        "SELECT batch_id FROM ingest_batches WHERE file_hash = ?",
+        (file_hash,)
+    ).fetchone()
 
-    batch_id = "batch_" + path.split("/")[-1]
+    if existing:
+        log_event(logger, Stage.INGEST, f"[SKIP] Library already imported (batch {existing['batch_id']})")
+        return
 
-    log_event(logger, Stage.DB, f"Creating batch {batch_id}")
-    batch_repo.create_batch(batch_id, path)
+    # Create new ingest batch
+    batch_id = str(uuid.uuid4())
 
+    if verbose:
+        log_event(logger, Stage.INGEST, f"Starting new ingest batch {batch_id} for file {path}")
+
+    # Insert batch record
+    conn.execute(
+        """
+        INSERT INTO ingest_batches (batch_id, source_file, file_hash)
+        VALUES (?, ?, ?)
+        """,
+        (batch_id, path, file_hash)
+    )
+
+    # Parse the library file
+    library = parse_library(path) # returns Library Dataclass
+    if verbose:
+        log_event(logger, Stage.INGEST, f"Parsed library file with {len(library.tracks)} tracks, {len(library.playlists)} playlists")
+    
+    # Insert raw track data
+    raw_repo = RawTrackRepository(db_instance)
     for track in library.tracks.values():
-        log_event(logger, Stage.RAW, f"{track.artist} - {track.title}")
         raw_repo.insert(track, batch_id)
+        if verbose:
+            log_event(logger, Stage.INGEST, f"Inserted raw track: {track.title} by {track.artist}")
 
-    log_event(logger, Stage.DB, f"Batch complete ({len(library.tracks)})")
+    # Insert batch metadata
+    batch_repo = BatchRepository(db_instance)
+    batch_repo.update_batch_metadata(batch_id, {
+        "num_tracks": len(library.tracks),
+        "num_playlists": len(library.playlists)
+    })
+
+    # Finalize batch
+    conn.execute(
+        """
+        UPDATE ingest_batches
+        SET status = 'completed'
+        WHERE batch_id = ?
+        """,
+        (batch_id,)
+    )
+
+    if verbose:
+        log_event(logger, Stage.INGEST, f"Completed ingest batch {batch_id}")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="archiverr",
+        description="Music library ingestion + metadata resolution system"
+    )
+
+    parser.add_argument(
+        "command",
+        choices=["ingest"],
+        help="Command to run"
+    )
+
+    parser.add_argument(
+        "path",
+        nargs="?",
+        help="Path to Apple Music Library.xml"
+    )
+
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose logging"
+    )
+
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable colored output"
+    )
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    main_logger = setup_logging(args.verbose, not args.no_color)
+
+    if args.verbose:
+        log_event(main_logger, Stage.INIT, f"Starting Archiverr with command: {args.command}, path: {args.path}")
+        
+
+    if args.command == "ingest":
+        if not args.path:
+            parser.error("ingest requires a path to Library.xml")
+        ingest(args.path, args.verbose)
+
+
+if __name__ == "__main__":
+    main()

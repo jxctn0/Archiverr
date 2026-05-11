@@ -1,12 +1,10 @@
 import hashlib
 
-
-
-def sha256_file(path):
-    sha = hashlib.sha256()
+def hash_file(path: str) -> str:
+    h = hashlib.sha256()
 
     with open(path, "rb") as f:
-        while chunk := f.read(8192):
-            sha.update(chunk)
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
 
-    return sha.hexdigest()
+    return h.hexdigest()

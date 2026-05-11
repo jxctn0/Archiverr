@@ -25,3 +25,17 @@ class BatchRepository:
                 """,
                 (count, batch_id),
             )
+
+    def update_batch_metadata(self, batch_id: str, metadata: dict):
+        fields = [f"{key} = ?" for key in metadata.keys()]
+        params = list(metadata.values()) + [batch_id]
+
+        with self.db.session() as conn:
+            conn.execute(
+                f"""
+                UPDATE ingest_batches
+                SET {', '.join(fields)}
+                WHERE batch_id = ?
+                """,
+                params,
+            )

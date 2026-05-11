@@ -65,6 +65,17 @@ def parse_library(path: str):
             track_count=track_data.get("Track Count"),
             disc_number=track_data.get("Disc Number"),
             disc_count=track_data.get("Disc Count"),
+            track_id=track_id,
+            persistent_id=track_data.get("Persistent ID"),
+            kind=track_data.get("Kind"),
+            size=track_data.get("Size"),
+            bitrate=track_data.get("Bit Rate"),
+            sample_rate=track_data.get("Sample Rate"),
+            location=track_data.get("Location"),
+            track_type=track_data.get("Track Type"),
+            protected=bool(track_data.get("Protected", False)),
+            apple_music=bool(track_data.get("Apple Music")),
+            raw_apple_data=track_data,
         )
         library.tracks[track_id] = track
 
